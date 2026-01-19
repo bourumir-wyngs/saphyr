@@ -464,6 +464,8 @@ pub struct Scanner<'input, T> {
     /// [`Possible`]: ImplicitMappingState::Possible
     /// [`Inside`]: ImplicitMappingState::Inside
     implicit_flow_mapping_states: Vec<ImplicitMappingState>,
+    /// A stack of markers for opening brackets `[` and `{`.
+    flow_markers: Vec<Marker>,
     buf_leading_break: String,
     buf_trailing_breaks: String,
     buf_whitespaces: String,
@@ -519,6 +521,7 @@ impl<'input, T: Input> Scanner<'input, T> {
             leading_whitespace: true,
             flow_mapping_started: false,
             implicit_flow_mapping_states: vec![],
+            flow_markers: vec![],
 
             buf_leading_break: String::new(),
             buf_trailing_breaks: String::new(),
@@ -929,6 +932,10 @@ impl<'input, T: Input> Scanner<'input, T> {
         if self.mark.col != 0 {
             self.mark.col = 0;
             self.mark.line += 1;
+        }
+
+        if let Some(mark) = self.flow_markers.pop() {
+            return Err(ScanError::new_str(mark, "unclosed bracket"));
         }
 
         // If the stream ended, we won't have more context. We can stall all the simple keys we
@@ -1389,12 +1396,14 @@ impl<'input, T: Input> Scanner<'input, T> {
         // The indicators '[' and '{' may start a simple key.
         self.save_simple_key();
 
+        let start_mark = self.mark;
+        self.flow_markers.push(start_mark);
+
         self.roll_one_col_indent();
         self.increase_flow_level()?;
 
         self.allow_simple_key();
 
-        let start_mark = self.mark;
         self.skip_non_blank();
 
         if tok == TokenType::FlowMappingStart {
@@ -1414,6 +1423,7 @@ impl<'input, T: Input> Scanner<'input, T> {
     fn fetch_flow_collection_end(&mut self, tok: TokenType<'input>) -> ScanResult {
         self.remove_simple_key()?;
         self.decrease_flow_level();
+        self.flow_markers.pop();
 
         self.disallow_simple_key();
 
@@ -1921,7 +1931,7 @@ impl<'input, T: Input> Scanner<'input, T> {
             if self.input.next_is_z() {
                 return Err(ScanError::new_str(
                     start_mark,
-                    "while scanning a quoted scalar, found unexpected end of stream",
+                    "unclosed quote",
                 ));
             }
 

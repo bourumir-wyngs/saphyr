@@ -253,11 +253,11 @@ fn test_issue14() {
     let Err(error) = run_parser(s) else { panic!() };
     assert_eq!(
         error.info(),
-        "while parsing a flow mapping, did not find expected ',' or '}'"
+        "unclosed bracket"
     );
     assert_eq!(
-        error.to_string(),
-        "while parsing a flow mapping, did not find expected ',' or '}' at byte 4 line 2 column 1"
+        error.marker().index(),
+        0
     );
 }
 
@@ -267,9 +267,12 @@ fn test_issue14_v2() {
     let Err(error) = run_parser(s) else { panic!() };
     assert_eq!(
         error.info(),
-        "while parsing a flow mapping, did not find expected ',' or '}'"
+        "unclosed bracket"
     );
-    assert!(error.to_string().ends_with("at byte 4 line 2 column 1"));
+    assert_eq!(
+        error.marker().index(),
+        0
+    );
 }
 
 #[test]
